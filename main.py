@@ -7,65 +7,11 @@ __author__ = "Maciej Piernikowski"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-import argparse, csv, string, re, datetime
+import argparse, csv, re, datetime
 from openpyxl import load_workbook
 
-class ProductAbstract:
-    target = 'product_abstract.csv'
-    product_abstracts = {}
-    product_new_threshold_days = 31 # number of days after which product will not be marked as `new`
+superatribute = 'superatribute'
 
-    @staticmethod
-    def category_key(args):
-        return str(lowerCase(args[-1]))
-
-    @staticmethod
-    def is_featured(args):
-        if args == 'Yes': return 1
-        return 0
-    
-    @staticmethod
-    def url(iso, current):
-        match = re.compile('/product/.*').findall(current['Product URI'])
-        if iso == 'de_DE': return match[0]
-        if iso == 'en_US': return '/en' + match[0] 
-
-    def process(self, products):
-        for product in products:
-            current = products[product]
-            if current['Parent ID'] == '': # only true abstracts
-                self.product_abstracts[str(current['Product SKU'])] = {
-                    'category_key': self.category_key(current['Category'].split('>')),
-                    'category_product_order': 2,
-                    'abstract_sku': current['Product SKU'],
-                    'tax_set_name': 'Standard Taxes',
-                    'name.de_DE': current['Product Name'],
-                    'name.en_US': current['Product Name'],
-                    'description.de_DE': current['Description'],
-                    'description.en_US': current['Description'],
-                    'url.de_DE': self.url('de_DE', current),
-                    'url.en_US': self.url('en_US', current),
-                    'meta_title.de_DE': current['Post Title'],
-                    'meta_title.en_US': current['Post Title'],
-                    'meta_keywords.de_DE': current['Slug'].replace('-',' '),
-                    'meta_keywords.en_US': current['Slug'].replace('-',' '),
-                    'meta_description.de_DE': current['Description'],
-                    'meta_description.en_US': current['Description'],
-                    'is_featured': self.is_featured(current['Featured']),
-                    # 'attribute_key_1': 'variant',
-                    # 'value_1': current['Ebay ean'],
-                    # 'attribute_key_1.de_DE': '',
-                    # 'value_1.de_DE': '',
-                    # 'attribute_key_1.en_US': '',
-                    # 'value_1.en_US': '',
-                    'color_code': '#FFFFFF',
-                    'new_from': current['Product Published'].strftime('%Y-%m-%d %H:%M:%S.%f'), # 2018-08-01 00:00:00.000000
-                    'new_to': (current['Product Published'] +
-                         datetime.timedelta(days=self.product_new_threshold_days)).strftime('%Y-%m-%d %H:%M:%S.%f')
-                }
-
-                print 'test'
-        print 'ja'
 class Category:
     target = 'category.csv'
     categories = {}
@@ -160,6 +106,62 @@ class Category:
             for category in self.categories:
                 dict_writer.writerow(self.categories[category])
         return args
+class ProductAbstract:
+    target = 'product_abstract.csv'
+    product_abstracts = {}
+    product_new_threshold_days = 31 # number of days after which product will not be marked as `new`
+
+    @staticmethod
+    def category_key(args):
+        return str(lowerCase(args[-1]))
+
+    @staticmethod
+    def is_featured(args):
+        if args == 'Yes': return 1
+        return 0
+    
+    @staticmethod
+    def url(iso, current):
+        match = re.compile('/product/.*').findall(current['Product URI'])
+        if iso == 'de_DE': return match[0]
+        if iso == 'en_US': return '/en' + match[0] 
+
+    def process(self, products):
+        for product in products:
+            current = products[product]
+            if current['Parent ID'] == '': # only true abstracts
+                self.product_abstracts[str(current['Product SKU'])] = {
+                    'category_key': self.category_key(current['Category'].split('>')),
+                    'category_product_order': 2,
+                    'abstract_sku': current['Product SKU'],
+                    'tax_set_name': 'Standard Taxes',
+                    'name.de_DE': current['Product Name'],
+                    'name.en_US': current['Product Name'],
+                    'description.de_DE': current['Description'],
+                    'description.en_US': current['Description'],
+                    'url.de_DE': self.url('de_DE', current),
+                    'url.en_US': self.url('en_US', current),
+                    'meta_title.de_DE': current['Post Title'],
+                    'meta_title.en_US': current['Post Title'],
+                    'meta_keywords.de_DE': current['Slug'].replace('-',' '),
+                    'meta_keywords.en_US': current['Slug'].replace('-',' '),
+                    'meta_description.de_DE': current['Description'],
+                    'meta_description.en_US': current['Description'],
+                    'is_featured': self.is_featured(current['Featured']),
+                    # 'attribute_key_1': 'variant',
+                    # 'value_1': current['Ebay ean'],
+                    # 'attribute_key_1.de_DE': '',
+                    # 'value_1.de_DE': '',
+                    # 'attribute_key_1.en_US': '',
+                    # 'value_1.en_US': '',
+                    'color_code': '#FFFFFF',
+                    'new_from': current['Product Published'].strftime('%Y-%m-%d %H:%M:%S.%f'), # 2018-08-01 00:00:00.000000
+                    'new_to': (current['Product Published'] +
+                         datetime.timedelta(days=self.product_new_threshold_days)).strftime('%Y-%m-%d %H:%M:%S.%f')
+                }
+
+                print 'test'
+        print 'ja'
 class ProductConcrete:
     target = 'product_concrete.csv'
     product_concretes = {}
@@ -183,7 +185,7 @@ class ProductConcrete:
                         'is_searchable.en_US': True,
                         'bundled': '',
                         'is_quantity_splittable': False,
-                        'attribute_key_1': 'superatribute',
+                        'attribute_key_1': superatribute,
                         'attribute_key_1.de_DE': 'Jewellery',
                         'attribute_key_1.en_US': 'Jewellery',
                         'value_1': current['Attribute pa jewellery'],
@@ -192,6 +194,53 @@ class ProductConcrete:
                     }
                 except KeyError:
                     self.product_concretes_orphaned[str(current['Product SKU'])] = current
+        print 'ja'
+class ProductAbstractStore:
+    target = 'product_abstract_store.csv'
+    product_abstract_stores = []
+    stores_avaiable = ['DE', 'AT', 'US']
+
+    def process(self):
+        for product in ProductAbstract.product_abstracts:
+            for store in self.stores_avaiable:
+                self.product_abstract_stores.append({ 'product_abstract_sku': product, 'store_name': store })
+        del product
+        print 'ja'
+class ProductAttributeKey:
+    target = 'product_attribute_key.csv'
+    product_attribute_keys = {}
+
+    def process(self):
+        self.product_attribute_keys[superatribute] = { 'is_super': True }
+        print 'ja'
+class ProductImage:
+    target = 'product_image.csv'
+    product_images = []
+    locales_avaiable = ['DE', 'US']
+    products = {}
+    current = {}
+
+    def __init__(self, products):
+        self.products = products
+
+    def process_store(self, product):
+        for store in self.locales_avaiable:
+            self.product_images.append({
+                'abstract_sku': self.current['abstract_sku'],
+                'concrete_sku': '',
+                'image_set_name': 'default',
+                'external_url_large': self.products[product]['Featured Image'],
+                'external_url_small': self.products[product]['Featured Image'],
+                'locale': getLocale(store)
+            })
+
+    def process(self):
+        for product in ProductAbstract.product_abstracts:
+            self.current = ProductAbstract.product_abstracts[product]
+            self.process_store(product)
+        for product in ProductConcrete.product_concretes:
+            self.current = ProductConcrete.product_concretes[product]
+            self.process_store(product)
         print 'ja'
 
 def upperCase(string):
@@ -206,6 +255,11 @@ def camelCase(string, space=False):
 def lowerCase(string):
     output = string.replace(' ', '-').lower()
     return output
+
+def getLocale(store):
+    if store == 'DE': return 'de_DE'
+    if store == 'US': return 'en_EN'
+    if store == 'AT': return 'de_DE'
 
 def process_workbook(sheet):
     row_count = 0
@@ -288,6 +342,9 @@ def main(args):
     del current_row, current_product, data_product_meta, row, sku
     ProductAbstract().process(products)
     ProductConcrete().process(products)
+    ProductAbstractStore().process()
+    ProductAttributeKey().process()
+    ProductImage(products).process()
     for product in ProductAbstract.product_abstracts:
         del products[product]
     for product in ProductConcrete.product_concretes:
@@ -298,7 +355,7 @@ def main(args):
         print 'bleh'
         del ProductConcrete.product_concretes_orphaned
     del products
-    print 'end'
+    print 'missed_products'
 
 if __name__ == "__main__":
     """ This is executed when run from the command line """
