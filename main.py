@@ -4,7 +4,7 @@ Module Docstring
 """
 
 __author__ = "Maciej Piernikowski"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __license__ = "MIT"
 
 import argparse, csv, re, datetime, os, uuid, unicodedata
@@ -231,12 +231,17 @@ class ProductConcrete:
                         'value_1.en_US': current['Attribute pa jewellery']                 
                     }
                     self.product_processed_count += 1
+                    self.last_concrete = str(current['Product SKU'])
                     msg = 'paired concrete SKU with parent abstract SKU '+ bold(parent['abstract_sku'])
                     Logger.update(current['Product SKU'], msg)
                 except KeyError:
                     self.product_concretes_orphaned[str(current['Product SKU'])] = current
         Logger.highlight('Processing of concrete products completed.')
-        Logger.output('abstract products', self.target)
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.product_concretes[self.last_concrete].keys())
+        writer.process()
+        writer.write()
+        Logger.output('concrete products', self.target)
         Logger.summary(self.product_processed_count, len(Processor.products))
 class ProductAbstractStore:
     target = 'product_abstract_store.csv'
@@ -259,6 +264,10 @@ class ProductAbstractStore:
             self.product_processed_count += 1
         del product
         Logger.highlight('Processing of abstract product stores completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.product_abstract_stores[0].keys())
+        writer.process()
+        writer.write()
         Logger.output('abstract product stores', self.target)
         Logger.summary(self.product_processed_count, len(Processor.products))
 class ProductAttributeKey:
@@ -488,7 +497,7 @@ class Processor:
                 if sku != '': self.products[str(product['Product SKU'])] = product
                 if sku == '': missed_ids.append(product['Product ID'])
                 del current_row
-        del product, index, value, row
+         
         for product in self.products:
             current = self.products[product]
             split = current['Category'].split('>')
@@ -593,29 +602,68 @@ class Writer:
         self.file = target
         self.path = os.path.dirname(os.path.realpath(__file__))
         self.target = target
+        Logger.highlight('Processing of '+self.target+'...')
     def get_fieldnames(self, headers):
-        with open(self.path+'/'+self.file, mode='w') as csv_file:
-            self.writer = csv.DictWriter(csv_file, fieldnames=headers)
-            if len(headers) > 0: self.writer.writeheader()
+        self.location = self.path+'/'+self.file
+        self.file = open(self.location, mode='w')
+        self.writer = csv.DictWriter(self.file, fieldnames=headers)
+        if len(headers) > 0: self.writer.writeheader()
+        Logger.msg('Created csv file with headers: '+bold(','.join(headers))+' in location: '+bold(self.location))
     def process(self):
         if self.target == 'product_abstract.csv':
             self.queue = ProductAbstract.product_abstracts
-            ProductAbstract.product_abstracts = True
-        for item in self.queue:
-            current_item = self.queue[item]
+            ProductAbstract.product_abstracts = {}
+            Logger.msg('Collected '+bold(str(len(self.queue))+' abstract product')+' entities.')
+        if self.target == 'product_concrete.csv':
+            self.queue = ProductConcrete.product_concretes
+            ProductConcrete.product_concretes = {}
+            Logger.msg('Collected '+bold(str(len(self.queue))+' concrete product')+' entities.')
+        if self.target == 'product_abstract_store.csv':
+            self.queue = ProductAbstractStore.product_abstract_stores
+            ProductAbstractStore.product_abstract_stores = {}
+            Logger.msg('Collected '+bold(str(len(self.queue))+' product abstract store')+' entities.')
+        for index, item in enumerate(self.queue):
+            queue_type = type(self.queue)
+            if queue_type is dict: current_item = self.queue[item]
+            if queue_type is list: current_item = self.queue[index]
             for key in current_item:
-                value = str(current_item[key])
-                value.replace('', '')
-                value = unicodedata.normalize('NFKD', value)
-                current_item[key] = value
-                print value;
-            print 'ja'
+                current_value = current_item[key]
+                current_type = type(current_value)
+                if current_type is unicode:
+                    new_value = str(current_value.encode('utf-8').replace('_x000D_\n','').replace('\xc2','').replace('\xa0',''))
+                    current_item[key] = new_value
+                if current_type is int: continue
+            if queue_type is dict: 
+                current_item = self.queue[item] = current_item
+                Logger.msg('Processed queue dict item: '+bold(item)+'')
+            if queue_type is list: 
+                current_item = self.queue[index] = current_item
+                Logger.msg('Processed queue list item: '+bold(index)+'')
     def write(self):
+        count = 0
         if self.target == 'product_abstract.csv':
             for product in self.queue:
                 current = self.queue[product]
                 self.writer.writerow(current)
-                del current
+                ProductAbstract.product_abstracts[product] = current
+                self.queue[product] = None
+                count += 1
+        if self.target == 'product_concrete.csv':
+            for product in self.queue:
+                current = self.queue[product]
+                self.writer.writerow(current)
+                ProductConcrete.product_concretes[product] = current
+                self.queue[product] = None
+                count += 1
+        if self.target == 'product_abstract_store.csv':
+            for index, store in enumerate(self.queue):
+                self.writer.writerow(store)
+                ProductAbstractStore.product_abstract_stores[index] = store
+                self.queue[index] = None
+                count += 1
+        self.file.close()
+        self.queue = {}
+        Logger.highlight('Saved '+bold(count)+' queue items.')
 
 def upperCase(string):
     output = string.replace('-',' ').upper()
