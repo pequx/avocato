@@ -3,7 +3,7 @@ data/
 .vscode
 *.csv
 .idea
- .Python
- bin/*
- include/*
- lib/*
+.Python
+bin/*
+include/*
+lib/*
