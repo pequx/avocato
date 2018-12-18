@@ -3,11 +3,11 @@
 Module Docstring
 """
 
-__author__ = "Maciej Piernikowski"
-__version__ = "0.2.0"
+__author__ = "Maciej Piernikowski <maciej@piernikowski.net>"
+__version__ = "0.3.0"
 __license__ = "MIT"
 
-import argparse, csv, re, datetime, os, uuid, unicodedata
+import argparse, csv, re, datetime, os, uuid, unicodedata, logging
 from openpyxl import load_workbook
 from collections import OrderedDict
 from fabulous.color import bold, highlight_red, highlight_green, green, italic, highlight_yellow
@@ -93,6 +93,7 @@ class Category:
                     'template_name': 'Catalog + CMS Block'   
                 }
                 self.categories_processed_count['level_1'] += 1
+                self.last_category = level_1
                 Logger.msg('Processing of the category level 1: '+bold(level_1)+' completed with parent: '+bold('demoshop'))
             level_2 = str(lowerCase(mapping['level_2']))
             if level_2 in self.categories['level_2']: level_2 = level_2+'-'+str(uuid.uuid4())
@@ -120,6 +121,10 @@ class Category:
             Logger.msg('Processing of the category level 2: '+bold(level_2)+' completed with parent: '+bold(level_1))
             self.mappings_processed_count += 1
         Logger.highlight('Processing of categories completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.categories['level_1'][self.last_category].keys())
+        writer.process()
+        writer.write()
         Logger.output('caegories', self.target)
         Logger.msg('Processed '+bold(str(self.mappings_processed_count))+
                 ' category mappings providing '+bold(str(self.categories_processed_count['level_1']))+
@@ -277,10 +282,17 @@ class ProductAttributeKey:
 
     def process(self):
         Logger.highlight('Processing of product attribute keys...')
-        self.product_attribute_keys[superatribute] = { 'is_super': True }
+        self.product_attribute_keys[superatribute] = { 
+            'attribute_key': superatribute,
+            'is_super': True 
+            }
         self.keys_processed_count += 1
         Logger.msg('Processed attribute key '+ bold(superatribute))
         Logger.highlight('Processing of product attribute keys completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.product_attribute_keys[superatribute].keys())
+        writer.process()
+        writer.write()
         Logger.output('product attribute keys', self.target)
         Logger.msg('Processed '+bold(str(self.keys_processed_count))+' product attribute keys')
 class ProductImage:
@@ -477,10 +489,8 @@ class ProductStock:
 class Processor:
     products = {}
     categories = []
-    
     def __init__(self, args):
-        """ Main entry point of the app """
-        print "hello world", args
+        Logger.highlight('Recived arguments: '+str(args))
         workbook = load_workbook(filename = args.filename, read_only=args.read_only)
         self.data_product_export = self.process_workbook(workbook['Product Export'])
         self.data_product_meta = self.process_workbook(workbook['Product Meta Data'])
@@ -497,7 +507,6 @@ class Processor:
                 if sku != '': self.products[str(product['Product SKU'])] = product
                 if sku == '': missed_ids.append(product['Product ID'])
                 del current_row
-         
         for product in self.products:
             current = self.products[product]
             split = current['Category'].split('>')
@@ -597,6 +606,12 @@ class Logger:
     @staticmethod
     def warning(msg):
         print(highlight_yellow(msg))
+    @staticmethod
+    def intro():
+        print(highlight_green('Products and meta data processor'))
+        print(green('version: '+__version__))
+        print(green('license: '+__license__))
+        print(green('author:  '+__author__))
 class Writer: 
     def __init__(self, target):
         self.file = target
@@ -610,6 +625,12 @@ class Writer:
         if len(headers) > 0: self.writer.writeheader()
         Logger.msg('Created csv file with headers: '+bold(','.join(headers))+' in location: '+bold(self.location))
     def process(self):
+        if self.target == 'category.csv':
+            self.queue = {}
+            for level in Category.categories:
+                self.queue.update(Category.categories[level])
+            Category.categories = {}
+            Logger.msg('Collected '+bold(str(len(self.queue))+' category')+' entities.')
         if self.target == 'product_abstract.csv':
             self.queue = ProductAbstract.product_abstracts
             ProductAbstract.product_abstracts = {}
@@ -622,6 +643,10 @@ class Writer:
             self.queue = ProductAbstractStore.product_abstract_stores
             ProductAbstractStore.product_abstract_stores = {}
             Logger.msg('Collected '+bold(str(len(self.queue))+' product abstract store')+' entities.')
+        if self.target == 'product_attribute_key.csv':
+            self.queue = ProductAttributeKey.product_attribute_keys
+            ProductAttributeKey.product_attribute_keys = {}
+            Logger.msg('Collected '+bold(str(len(self.queue))+' product abstract attribute keys')+' entities.')
         for index, item in enumerate(self.queue):
             queue_type = type(self.queue)
             if queue_type is dict: current_item = self.queue[item]
@@ -641,6 +666,13 @@ class Writer:
                 Logger.msg('Processed queue list item: '+bold(index)+'')
     def write(self):
         count = 0
+        if self.target == 'category.csv':
+            for category in self.queue:
+                current = self.queue[category]
+                self.writer.writerow(current)
+                Category.categories[category] = current
+                self.queue[category] = None
+                count += 1
         if self.target == 'product_abstract.csv':
             for product in self.queue:
                 current = self.queue[product]
@@ -660,6 +692,13 @@ class Writer:
                 self.writer.writerow(store)
                 ProductAbstractStore.product_abstract_stores[index] = store
                 self.queue[index] = None
+                count += 1
+        if self.target == 'product_attribute_key.csv':
+            for key in self.queue:
+                current = self.queue[key]
+                self.writer.writerow(current)
+                ProductAttributeKey.product_attribute_keys[key] = current
+                self.queue[key] = None
                 count += 1
         self.file.close()
         self.queue = {}
@@ -683,16 +722,12 @@ def getLocale(store):
 if __name__ == "__main__":
     """ This is executed when run from the command line """
     parser = argparse.ArgumentParser()
-
     # Required positional argument
     parser.add_argument("filename", help="Required positional argument")
-
     # Optional argument flag which defaults to False
     parser.add_argument("-r", "--read-only", action="store", default=True)
-
     # Optional argument which requires a parameter (eg. -d test)
     parser.add_argument("-n", "--name", action="store", dest="name")
-
     # Optional verbosity counter (eg. -v, -vv, -vvv, etc.)
     parser.add_argument(
         "-v",
@@ -700,14 +735,13 @@ if __name__ == "__main__":
         action="count",
         default=0,
         help="Verbosity (-v, -vv, etc)")
-
     # Specify output of "--version"
     parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s (version {version})".format(version=__version__))
-
     args = parser.parse_args()
+    Logger().intro()
     processor = Processor(args)
     processor.hydrate()
     processor.run()
