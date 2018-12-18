@@ -9,6 +9,8 @@ __license__ = "MIT"
 
 import argparse, csv, re, datetime
 from openpyxl import load_workbook
+from collections import OrderedDict
+from fabulous.color import bold, highlight_red, highlight_green, green
 
 superatribute = 'superatribute'
 
@@ -57,6 +59,7 @@ class Category:
         }
 
     def process(self, args):
+        print 'Processing: category mapping...'
         for mapping in args:
             self.categories[str(lowerCase(mapping['level_2']))] = {
                 'category_key': lowerCase(mapping['level_1']),
@@ -110,6 +113,7 @@ class ProductAbstract:
     target = 'product_abstract.csv'
     product_abstracts = {}
     product_new_threshold_days = 31 # number of days after which product will not be marked as `new`
+    product_processed_count = 0
 
     @staticmethod
     def category_key(args):
@@ -126,9 +130,10 @@ class ProductAbstract:
         if iso == 'de_DE': return match[0]
         if iso == 'en_US': return '/en' + match[0] 
 
-    def process(self, products):
-        for product in products:
-            current = products[product]
+    def process(self):
+        Logger.highlight('Processing of abstract products...')
+        for product in Processor.products:
+            current = Processor.products[product]
             if current['Parent ID'] == '': # only true abstracts
                 self.product_abstracts[str(current['Product SKU'])] = {
                     'category_key': self.category_key(current['Category'].split('>')),
@@ -159,17 +164,18 @@ class ProductAbstract:
                     'new_to': (current['Product Published'] +
                          datetime.timedelta(days=self.product_new_threshold_days)).strftime('%Y-%m-%d %H:%M:%S.%f')
                 }
-
-                print 'test'
-        print 'ja'
+                self.product_processed_count += 1
+                Logger.update(current['Product SKU'])
+        Logger.highlight('Processing of abstract products completed.')
+        Logger.summary(self.product_processed_count, len(Processor.products))
 class ProductConcrete:
     target = 'product_concrete.csv'
     product_concretes = {}
     product_concretes_orphaned = {}
 
-    def process(self, products):
-        for product in products:
-            current = products[product]
+    def process(self):
+        for product in Processor.products:
+            current = Processor.products[product]
             if current['Parent SKU'] != '': # only true concretes
                 try:
                     parent = ProductAbstract.product_abstracts[str(current['Parent SKU'])]
@@ -220,10 +226,10 @@ class ProductImage:
     products = {}
     current = {}
 
-    def __init__(self, products):
+    def __init__(self):
         self.products = products
 
-    def process_store(self, product):
+    def process_store(self):
         for store in self.locales_avaiable:
             self.product_images.append({
                 'abstract_sku': self.current['abstract_sku'],
@@ -242,120 +248,243 @@ class ProductImage:
             self.current = ProductConcrete.product_concretes[product]
             self.process_store(product)
         print 'ja'
+class ProductLabel:
+    target = 'product_label.csv'
+    product_labels = {
+        'TOP': {
+            'name': 'TOP',
+            'is_active': True,
+            'is_dynamic': False,
+            'is_exclusive': False,
+            'front_end_reference': 'top',
+            'valid_from': '',
+            'valid_to': '',
+            'name.de_DE': 'Top',
+            'name.en_US': 'Top',
+            'product_abstract_skus': ''
+        },
+        'NEW': {
+            'name': 'NEW',
+            'is_active': True,
+            'is_dynamic': True,
+            'is_exclusive': False,
+            'front_end_reference': 'new',
+            'valid_from': '',
+            'valid_to': '',
+            'name.de_DE': 'Neu',
+            'name.en_US': 'New',
+            'product_abstract_skus': ''
+        },
+        'SALE': {
+            'name': 'NEW',
+            'is_active': True,
+            'is_dynamic': True,
+            'is_exclusive': False,
+            'front_end_reference': 'sale',
+            'valid_from': '',
+            'valid_to': '',
+            'name.de_DE': 'SALE %',
+            'name.en_US': 'SALE %',
+            'product_abstract_skus': ''
+        }
+    }
+
+    def process(self):
+        print 'Processing: product labels...'
+class ProductManagmentAttribute:
+    target = 'product_management_attribute.csv'
+    product_management_attributes = []
+
+    @staticmethod
+    def getAttributes():
+        attributes = []
+        for product in ProductConcrete.product_concretes:
+            current = ProductConcrete.product_concretes[product]
+            attributes.append(current['value_1'])
+        return ','.join(list(OrderedDict.fromkeys(attributes)))
+
+    def process(self):
+        attributes = self.getAttributes()
+        self.product_management_attributes.append({
+            'key': superatribute,
+            'input_type': 'text',
+            'allow_input': 'yes',
+            'is_multiple': 'yes',
+            'values': attributes,
+            'key_translation.en_US': attributes,
+            'key_translation.de_DE': attributes,
+            'value_translations.en_US': attributes,
+            'value_translations.de_DE': attributes
+        })
+        print 'ja'
+class ProductPrice:
+    target = 'product_price.csv' 
+    product_prices = []
+    missed_product_prices = []
+    products = {}
+
+    def __init__(self, products):
+        self.products = products
+
+    def process(self):
+        for product in ProductConcrete.product_concretes:
+            current = ProductConcrete.product_concretes[product]
+            try: 
+                price = float(self.products[product]['Price'])
+                tax = 0.2 * price
+                self.product_prices.append({
+                    'abstract_sku': '',
+                    'concrete_sku': current['concrete_sku'],
+                    'price_type': 'DEFAULT',
+                    'store': 'DE',
+                    'currency': 'EUR',
+                    'value_net': int((price - tax) * 100),
+                    'value_gross': int(price * 100),
+                    'price_data.volume_prices': ''
+                })
+            except KeyError: 
+                self.missed_product_prices.append(product)
+        print 'ja'   
+class ProductStock:
+    target = 'product_stock.csv'
+    product_stocks = {}
+
+    def process(self):
+        for product in ProductConcrete.product_concretes:
+            current = ProductConcrete.product_concretes[product]
+            self.product_stocks[product] = {
+                'concrete_sku': '',
+                'name': 'Warehouse1',
+                'quantity': '',
+                'is_never_out_of_stock': False,
+                'is_bundle': False
+            }
+
+class Processor:
+    products = {}
+    
+    def __init__(self, args):
+        """ Main entry point of the app """
+        print "hello world", args
+        workbook = load_workbook(filename = args.filename, read_only=args.read_only)
+        data_product_export = self.process_workbook(workbook['Product Export'])
+        data_product_meta = self.process_workbook(workbook['Product Meta Data'])
+        del workbook
+        missed_ids = [] # products without id
+        for row in data_product_export['rows']:
+            if row > 1: 
+                current_row = data_product_export['rows'][row]
+                product = {}
+                for index, value in enumerate(current_row):
+                    product[data_product_export['headers'][index]] = value
+                sku = product['Product SKU']
+                if sku != '': self.products[str(product['Product SKU'])] = product
+                if sku == '': missed_ids.append(product['Product ID'])
+                del current_row
+        del product, index, value, data_product_export, row
+        category_mappings = []
+        for product in self.products:
+            current = self.products[product]
+            split = current['Category'].split('>')
+            # if split[0] != 'Uncategorized': category_mappings[product] = { split[0]: split[1] }
+            if split[0] != 'Uncategorized': category_mappings.append({ 'level_1': split[0], 'level_2': split[1] })
+            del current
+        del product, split
+        category_count = {}
+        category_index = 0
+        while category_index < len(category_mappings):
+            if category_mappings[category_index]['level_2'] in category_count:
+                del category_mappings[category_index]
+            else:
+                category_count[category_mappings[category_index]['level_2']] = 1
+                category_index += 1
+        del category_count, category_index
+        Category().process(category_mappings)
+        del category_mappings
+        missed_rows = {} # rows without data
+        missed_matches = [] # meta prodocuts not mached to export products
+        for row in data_product_meta['rows']:
+            if row > 1:
+                current_row = data_product_meta['rows'][row]
+                meta_product = {}
+                for index, value in enumerate(current_row):
+                    meta_product[data_product_meta['headers'][index]] = value
+                del index, value
+                sku = meta_product['Product SKU']
+                if sku != '': 
+                    try: 
+                        current_product = self.products[str(sku)]
+                        self.products[str(sku)].update(meta_product)
+                    except KeyError: missed_matches.append(current_product['Product ID'])
+                    del meta_product
+                if sku == '': 
+                    missed_rows[row] = current_row
+                    continue
+        del current_row, current_product, data_product_meta, row, sku
+        ProductAbstract().process()
+        ProductConcrete().process()
+        ProductAbstractStore().process()
+        ProductAttributeKey().process()
+        ProductImage().process()
+        ProductLabel().process()
+        ProductManagmentAttribute().process()
+        ProductPrice().process()
+        # for product in ProductAbstract.product_abstracts:
+        #     del products[product]
+        # for product in ProductConcrete.product_concretes:
+        #     del products[product]
+        # del product
+        # if products == ProductConcrete.product_concretes_orphaned:
+        #     missed_products = products
+        #     print 'bleh'
+        #     del ProductConcrete.product_concretes_orphaned
+        # del products
+        # print 'missed_products'
+
+    @staticmethod
+    def process_workbook(sheet):
+        row_count = 0
+        cell_count = 0
+        values = {}
+        for row in sheet.rows:
+            cols = []
+            for cell in row:
+                if cell.value is not None: cols.append(cell.value)
+                elif cell.value is None: cols.append('')
+                cell_count += 1
+                del cell
+            row_count += 1
+            values[row_count] = cols
+            del cols, row
+        headers = values[1]
+        del values[1] # removes first row as it contains headers
+        return { 'headers': headers, 'rows': values }
+class Logger:
+    @staticmethod
+    def highlight(msg):
+        print(highlight_green(msg))
+    @staticmethod
+    def update(sku):
+        print(green('Processing of the SKU: ' + bold(str(sku)) + ' completed.'))
+    @staticmethod
+    def summary(num, total, msg=False, ):
+        if msg is False: print(green('Processed ' + bold(str(num)) + ' SKUs of ' + bold(str(total)) + ' imported products.'))
+        if msg is True: print(green('Processed ' + bold(str(num)) + ' SKUs of ' + bold(str(total)) + ' imported products with message: ') +  bold(message))
 
 def upperCase(string):
     output = string.replace('-',' ').upper()
     return output
-
 def camelCase(string, space=False):
     output = ''.join(x for x in string.title() if x.isalnum())
     if space: return output[0].lower() + ' ' + output[1:]
     return output[0].lower() + output[1:]
-
 def lowerCase(string):
     output = string.replace(' ', '-').lower()
     return output
-
 def getLocale(store):
     if store == 'DE': return 'de_DE'
     if store == 'US': return 'en_EN'
     if store == 'AT': return 'de_DE'
-
-def process_workbook(sheet):
-    row_count = 0
-    cell_count = 0
-    values = {}
-    headers = []
-    for row in sheet.rows:
-        cols = []
-        for cell in row:
-            if cell.value is not None: cols.append(cell.value)
-            elif cell.value is None: cols.append('')
-            cell_count += 1
-            del cell
-        row_count += 1
-        del row
-        values[row_count] = cols
-        del cols
-    headers = values[1]
-    del values[1] # removes first row as it contains headers
-    return { 'headers': headers, 'rows': values }
-
-def main(args):
-    """ Main entry point of the app """
-    print "hello world", args
-    workbook = load_workbook(filename = args.filename, read_only=args.read_only)
-    data_product_export = process_workbook(workbook['Product Export'])
-    data_product_meta = process_workbook(workbook['Product Meta Data'])
-    del workbook
-    products = {}
-    missed_ids = [] # products without id
-    for row in data_product_export['rows']:
-        if row > 1: 
-            current_row = data_product_export['rows'][row]
-            product = {}
-            for index, value in enumerate(current_row):
-                product[data_product_export['headers'][index]] = value
-            sku = product['Product SKU']
-            if sku != '': products[str(product['Product SKU'])] = product
-            if sku == '': missed_ids.append(product['Product ID'])
-            del current_row
-    del product, index, value, data_product_export, row
-    category_mappings = []
-    for product in products:
-        current = products[product]
-        split = current['Category'].split('>')
-        # if split[0] != 'Uncategorized': category_mappings[product] = { split[0]: split[1] }
-        if split[0] != 'Uncategorized': category_mappings.append({ 'level_1': split[0], 'level_2': split[1] })
-        del current
-    del product, split
-    category_count = {}
-    category_index = 0
-    while category_index < len(category_mappings):
-        if category_mappings[category_index]['level_2'] in category_count:
-            del category_mappings[category_index]
-        else:
-            category_count[category_mappings[category_index]['level_2']] = 1
-            category_index += 1
-    del category_count, category_index
-    Category().process(category_mappings)
-    del category_mappings
-    missed_rows = {} # rows without data
-    missed_matches = [] # meta prodocuts not mached to export products
-    for row in data_product_meta['rows']:
-        if row > 1:
-            current_row = data_product_meta['rows'][row]
-            meta_product = {}
-            for index, value in enumerate(current_row):
-                meta_product[data_product_meta['headers'][index]] = value
-            del index, value
-            sku = meta_product['Product SKU']
-            if sku != '': 
-                try: 
-                    current_product = products[str(sku)]
-                    products[str(sku)].update(meta_product)
-                except KeyError: missed_matches.append(current_product['Product ID'])
-                del meta_product
-            if sku == '': 
-                missed_rows[row] = current_row
-                continue
-    del current_row, current_product, data_product_meta, row, sku
-    ProductAbstract().process(products)
-    ProductConcrete().process(products)
-    ProductAbstractStore().process()
-    ProductAttributeKey().process()
-    ProductImage(products).process()
-    for product in ProductAbstract.product_abstracts:
-        del products[product]
-    for product in ProductConcrete.product_concretes:
-        del products[product]
-    del product
-    if products == ProductConcrete.product_concretes_orphaned:
-        missed_products = products
-        print 'bleh'
-        del ProductConcrete.product_concretes_orphaned
-    del products
-    print 'missed_products'
 
 if __name__ == "__main__":
     """ This is executed when run from the command line """
@@ -385,5 +514,5 @@ if __name__ == "__main__":
         version="%(prog)s (version {version})".format(version=__version__))
 
     args = parser.parse_args()
-    main(args)
+    Processor(args)
 
