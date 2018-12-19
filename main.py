@@ -15,6 +15,36 @@ from fabulous.color import bold, highlight_red, highlight_green, green, italic, 
 superatribute = 'superatribute'
 
 
+class CategoryTemplate:
+    target = 'category_template.csv'
+    category_templates = {}
+    templates_processed_count = 0
+
+    def __init__(self):
+        Logger.highlight('Processing of category templates...')
+        self.category_templates['Catalog (default)'] = {
+            'template_name': 'Catalog (default)',
+            'template_path': '@CatalogPage/views/catalog/catalog.twig'
+        }
+        self.category_templates['Catalog + CMS Block'] = {
+            'template_name': 'Catalog + CMS Block',
+            'template_path': '@CatalogPage/views/catalog-with-cms-block/catalog-with-cms-block.twig'
+        }
+        self.category_templates['CMS Block'] = {
+            'template_name': 'CMS Block',
+            'template_path': '@CatalogPage/views/simple-cms-block/simple-cms-block.twig'
+        }
+        self.templates_processed_count += 3
+
+    def process(self):
+        Logger.highlight('Processing of category templates completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.category_templates['Catalog (default)'].keys())
+        writer.process()
+        writer.write()
+        Logger.output('category templates', self.target)
+
+
 class Category:
     target = 'category.csv'
     categories = {
@@ -42,7 +72,7 @@ class Category:
             'is_active': 1,
             'is_in_menu': 1,
             'is_clickable': 1,
-            'is_searchable': 0,
+            'is_searchable': 1,
             'is_root': 1,
             'is_main': 1,
             'template_name': 'Catalog (default)'
@@ -62,7 +92,7 @@ class Category:
             'is_in_menu': 0,
             'is_clickable': 1,
             'is_searchable': 0,
-            'is_root': 1,
+            'is_root': 0,
             'is_main': 1,
             'node_order': 50,
             'template_name': 'Catalog (default)'   
@@ -140,6 +170,7 @@ class ProductAbstract:
     product_abstracts = {}
 
     def __init__(self):
+        Logger.highlight('Processing of abstract products...')
         self.product_processed_count = 0
         self.last_abstract = None
 
@@ -162,7 +193,6 @@ class ProductAbstract:
             return '/en' + match[0]
 
     def process(self):
-        Logger.highlight('Processing of abstract products...')
         for product in Processor.products:
             current = Processor.products[product]
             if current['Parent ID'] == '':  # only true abstracts
@@ -212,11 +242,12 @@ class ProductConcrete:
     product_concretes = {}
 
     def __init__(self):
+        Logger.highlight('Processing of concrete products...')
         self.product_concretes_orphaned = {}
         self.product_processed_count = 0
+        self.last_concrete = None
 
     def process(self):
-        Logger.highlight('Processing of concrete products...')
         for product in Processor.products:
             current = Processor.products[product]
             if current['Parent SKU'] != '':  # only true concretes
@@ -262,11 +293,11 @@ class ProductAbstractStore:
     product_abstract_stores = []
 
     def __init__(self):
+        Logger.highlight('Processing of abstract product stores...')
         self.product_processed_count = 0
         self.store_processed_count = 0
 
     def process(self):
-        Logger.highlight('Processing of abstract product stores...')
         for product in ProductAbstract.product_abstracts:
             for store in self.stores:
                 self.product_abstract_stores.append({
@@ -292,10 +323,10 @@ class ProductAttributeKey:
     product_attribute_keys = {}
 
     def __init__(self):
+        Logger.highlight('Processing of product attribute keys...')
         self.keys_processed_count = 0
 
     def process(self):
-        Logger.highlight('Processing of product attribute keys...')
         self.product_attribute_keys[superatribute] = { 
             'attribute_key': superatribute,
             'is_super': True 
@@ -315,12 +346,15 @@ class ProductImage:
     target = 'product_image.csv'
     product_images = []
     pseudo_stores = ['DE', 'US']  # DE: AT + DE, US: EN
-    products_processed_count = 0
-    images_processed_count = 0
-    stores_processed_count = 0
-    missed_products = []
-    products = {}
-    current = {}
+
+    def __init__(self):
+        Logger.highlight('Processing of product images...')
+        self.products_processed_count = 0
+        self.images_processed_count = 0
+        self.stores_processed_count = 0
+        self.missed_products = []
+        self.products = {}
+        self.current = {}
 
     def process_store(self, product):
         for store in self.pseudo_stores:
@@ -332,7 +366,7 @@ class ProductImage:
                         'abstract_sku': self.current['abstract_sku'],
                         'concrete_sku': '',
                         'image_set_name': 'default',
-                        'external_url_large': '',
+                        'external_url_large': Processor.products[product]['Featured Image'],
                         'external_url_small': Processor.products[product]['Featured Image'],
                         'locale': getLocale(store)
                     })
@@ -360,7 +394,6 @@ class ProductImage:
             self.stores_processed_count += 1
 
     def process(self):
-        Logger.highlight('Processing of product images...')
         for product in ProductAbstract.product_abstracts:
             self.current = ProductAbstract.product_abstracts[product]
             self.process_store(product)
@@ -376,6 +409,32 @@ class ProductImage:
         Logger.msg('Processed '+bold(str(self.products_processed_count))+' SKUs with '
                    + bold(str(self.images_processed_count))+ ' images in '+bold(str(len(self.pseudo_stores)))
                    + ' stores from '+bold(str(len(Processor.products)))+' imported products.')
+
+
+class ProductImageInternal:
+    target = 'product_image_internal.csv'
+    product_images = []
+
+    def __init__(self):
+        Logger.highlight('Processing of product images internal...')
+        self.products_processed_count = 0
+        self.images_processed_count = 0
+
+    def process(self):
+        self.product_images.append({
+            'image_set_name': '',
+            'external_url_large': '',
+            'external_url_small': '',
+            'locale': '',
+            'abstract_sku': '',
+            'concrete_sku': ''
+        })
+        Logger.highlight('Processing of product images internal completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.product_images[-1])
+        writer.process()
+        writer.write()
+        Logger.output('product images internal', self.target)
 
 
 class ProductLabel:
@@ -561,112 +620,110 @@ class ProductStock:
         Logger.msg('Processed '+bold(self.products_processed_count)+' SKUs.')
 
 
-class Processor:
-    products = {}
-    categories = []
+class ProductDiscontinued:
+    target = 'product_discontinued.csv'
+    products_discontinued = {}
 
-    def __init__(self, args):
-        Logger.highlight('Recived arguments: '+str(args))
-        workbook = load_workbook(filename = args.filename, read_only=args.read_only)
-        self.data_product_export = self.process_workbook(workbook['Product Export'])
-        self.data_product_meta = self.process_workbook(workbook['Product Meta Data'])
-        del workbook
+    def __init__(self):
+        Logger.highlight('Processing of products discontinued...')
+        self.last_product = None
+        self.products_processed_count = 0
 
-    def hydrate(self):
-        missed_ids = [] # products without id
-        for row in self.data_product_export['rows']:
-            if row > 1: 
-                current_row = self.data_product_export['rows'][row]
-                product = {}
-                for index, value in enumerate(current_row):
-                    product[self.data_product_export['headers'][index]] = value
-                sku = product['Product SKU']
-                if sku != '':
-                    self.products[str(product['Product SKU'])] = product
-                if sku == '':
-                    missed_ids.append(product['Product ID'])
-                del current_row
-        for product in self.products:
-            current = self.products[product]
-            split = current['Category'].split('>')
-            # if split[0] != 'Uncategorized': category_mappings[product] = { split[0]: split[1] }
-            if split[0] != 'Uncategorized':
-                self.categories.append({ 'level_1': split[0], 'level_2': split[1] })
-            del current
-        del product, split
-        category_count = {}
-        category_index = 0
-        while category_index < len(self.categories):
-            if self.categories[category_index]['level_2'] in category_count:
-                del self.categories[category_index]
-            else:
-                category_count[self.categories[category_index]['level_2']] = 1
-                category_index += 1
-        del category_count, category_index
-        missed_rows = {} # rows without data
-        missed_matches = [] # meta prodocuts not mached to export products
-        for row in self.data_product_meta['rows']:
-            if row > 1:
-                current_row = self.data_product_meta['rows'][row]
-                meta_product = {}
-                for index, value in enumerate(current_row):
-                    meta_product[self.data_product_meta['headers'][index]] = value
-                del index, value
-                sku = meta_product['Product SKU']
-                if sku != '': 
-                    try: 
-                        current_product = self.products[str(sku)]
-                        self.products[str(sku)].update(meta_product)
-                    except KeyError: missed_matches.append(current_product['Product ID'])
-                    del meta_product
-                if sku == '': 
-                    missed_rows[row] = current_row
-                    continue
-        del current_row, current_product, row, sku
+    def process(self):
+        sku = ''
+        self.products_discontinued[sku] = {
+            'sku_concrete': '',
+            'note.en_US': '',
+            'note.de_DE': ''
+        }
+        self.products_processed_count += 1
+        Logger.msg('Processing of the SKU: '+bold(sku)+' completed.')
+        Logger.highlight('Processing of products discontinued completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.products_discontinued[sku])
+        writer.process()
+        writer.write()
+        Logger.output('products discontinued', self.target)
+        Logger.msg('Processed '+bold(self.products_processed_count)+' SKUs.')
 
-    @staticmethod
-    def run():
-        Category().process()
-        ProductAbstract().process()
-        ProductConcrete().process()
-        ProductAbstractStore().process()
-        ProductAttributeKey().process()
-        ProductImage().process()
-        ProductLabel().process()
-        ProductManagmentAttribute().process()
-        ProductPrice().process()
-        ProductStock().process()
-        Logger.highlight('Processing complete.')
-        # for product in ProductAbstract.product_abstracts:
-        #     del products[product]
-        # for product in ProductConcrete.product_concretes:
-        #     del products[product]
-        # del product
-        # if products == ProductConcrete.product_concretes_orphaned:
-        #     missed_products = products
-        #     print 'bleh'
-        #     del ProductConcrete.product_concretes_orphaned
-        # del products
-        # print 'missed_products'
 
-    @staticmethod
-    def process_workbook(sheet):
-        row_count = 0
-        cell_count = 0
-        values = {}
-        for row in sheet.rows:
-            cols = []
-            for cell in row:
-                if cell.value is not None: cols.append(cell.value)
-                elif cell.value is None: cols.append('')
-                cell_count += 1
-                del cell
-            row_count += 1
-            values[row_count] = cols
-            del cols, row
-        headers = values[1]
-        del values[1] # removes first row as it contains headers
-        return {'headers': headers, 'rows': values}
+class ProductGroup:
+    target = 'product_group.csv'
+    product_groups = {}
+
+    def __init__(self):
+        Logger.highlight('Processing of product groups...')
+        self.last_product = None
+        self.products_processed_count = 0
+
+    def process(self):
+        sku = ''
+        self.product_groups[sku] = {
+            'group_key': '',
+            'abstract_sku': '',
+            'position': ''
+        }
+        self.products_processed_count += 1
+        Logger.msg('Processing of the SKU: '+bold(sku)+' completed.')
+        Logger.highlight('Processing of product groups completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.product_groups[sku])
+        writer.process()
+        writer.write()
+        Logger.output('product groups', self.target)
+        Logger.msg('Processed '+bold(self.products_processed_count)+' SKUs.')
+
+
+class ProductSearchAttributeMap:
+    target = 'product_search_attribute_map.csv'
+    search_attributes = []
+    target_fields = ['full-text-boosted', 'suggestion-terms', 'completion-terms']
+
+    def __init__(self):
+        Logger.highlight('Processing of product search attribute map...')
+        self.attributes_processed_count = 0
+
+    def process(self):
+        for target in self.target_fields:
+            self.search_attributes.append({
+                'attribute_key': superatribute,
+                'target_field': target
+            })
+            self.attributes_processed_count += 1
+            Logger.msg('Processing of the attribute: '+bold(superatribute)+' completed.')
+        Logger.highlight('Processing of product search attribute map completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.search_attributes[-1])
+        writer.process()
+        writer.write()
+        Logger.output('product search attribute map', self.target)
+        Logger.msg('Processed '+bold(self.attributes_processed_count)+' attributes.')
+
+
+class ProductSearchAttribute:
+    target = 'product_search_attribute.csv'
+    search_attributes = {}
+
+    def __init__(self):
+        Logger.highlight('Processing of product search attributes...')
+        self.attributes_processed_count = 0
+
+    def process(self):
+        self.search_attributes[superatribute] = {
+            'key': superatribute,
+            'filter_type': 'multi-select',  # single-select
+            'position': 1,
+            'key.en_US': superatribute,
+            'key.de_DE': superatribute
+        }
+        Logger.msg('Processing of the attribute: ' + bold(superatribute) + ' completed.')
+        Logger.highlight('Processing of product search attributes completed.')
+        writer = Writer(self.target)
+        writer.get_fieldnames(self.search_attributes[superatribute])
+        writer.process()
+        writer.write()
+        Logger.output('product search attributes', self.target)
+        Logger.msg('Processed '+bold(self.attributes_processed_count)+' attributes.')
 
 
 class Logger:
@@ -704,7 +761,21 @@ class Logger:
 
     @staticmethod
     def intro():
-        print(highlight_green('Products and meta data processor'))
+        # lines = [
+        #     u' █████╗ ██╗   ██╗ ██████╗  ██████╗ █████╗ ████████╗ ██████╗ ',
+        #     u'██╔══██╗██║   ██║██╔═══██╗██╔════╝██╔══██╗╚══██╔══╝██╔═══██╗',
+        #     u'███████║██║   ██║██║   ██║██║     ███████║   ██║   ██║   ██║',
+        #     u'██╔══██║╚██╗ ██╔╝██║   ██║██║     ██╔══██║   ██║   ██║   ██║',
+        #     u'██║  ██║ ╚████╔╝ ╚██████╔╝╚██████╗██║  ██║   ██║   ╚██████╔╝',
+        #     u'╚═╝  ╚═╝  ╚═══╝   ╚═════╝  ╚═════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ '
+        # ]
+        print(highlight_green(' [  A  V  O  C  A  T  O  ] '))
+        print(highlight_green(' [ Products and meta data processor ] '))
+        # for line in lines:
+        # current = line.replace('█', '\u2588').replace('╗', '\u2557').replace('╔', '\u2554').\
+        #     replace('═', '\u2550').replace('║', '\u2551').replace('╗', '\u2557').replace('╚', '\u255A').\
+        #     replace('╝', '\u255D')
+        # current = line.decode('utf-8')
         print(green('version: '+__version__))
         print(green('license: '+__license__))
         print(green('author:  '+__author__))
@@ -712,6 +783,7 @@ class Logger:
 
 class Writer:
     path = None
+    location = None
 
     def __init__(self, target):
         self.file = target
@@ -719,11 +791,10 @@ class Writer:
         self.target = target
         self.queue = {}
         self.writer = None
-        self.location = None
         Logger.highlight('Processing of '+self.target+'...')
 
     def get_fieldnames(self, headers):
-        self.location = self.path+'/'+ self.file
+        self.location = self.path+'/'+self.file
         self.file = open(self.location, mode='w')
         self.writer = csv.DictWriter(self.file, fieldnames=headers)
         if len(headers) > 0:
@@ -731,6 +802,10 @@ class Writer:
         Logger.msg('Created csv file with headers: '+bold(','.join(headers))+' in location: '+bold(self.location))
 
     def process(self):
+        if self.target == 'category_template.csv':
+            self.queue = CategoryTemplate.category_templates
+            CategoryTemplate.category_templates = {}
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' category template') + ' entities.')
         if self.target == 'category.csv':
             self.queue = {}
             for level in Category.categories:
@@ -773,6 +848,26 @@ class Writer:
             self.queue = ProductStock.product_stocks
             ProductStock.product_stocks = {}
             Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product stock') + ' entities.')
+        if self.target == 'product_image_internal.csv':
+            self.queue = ProductImageInternal.product_images
+            ProductImageInternal.product_images = []
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product image internal') + ' entities.')
+        if self.target == 'product_discontinued.csv':
+            self.queue = ProductDiscontinued.products_discontinued
+            ProductDiscontinued.products_discontinued = {}
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product discontinued') + ' entities.')
+        if self.target == 'product_group.csv':
+            self.queue = ProductGroup.product_groups
+            ProductGroup.product_groups = {}
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product group') + ' entities.')
+        if self.target == 'product_search_attribute_map.csv':
+            self.queue = ProductSearchAttributeMap.search_attributes
+            ProductSearchAttributeMap.search_attributes = []
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product search attribute map') + ' entities.')
+        if self.target == 'product_search_attribute.csv':
+            self.queue = ProductSearchAttribute.search_attributes
+            ProductSearchAttribute.search_attributes = {}
+            Logger.msg('Collected ' + bold(str(len(self.queue)) + ' product search attribute') + ' entities.')
         for index, item in enumerate(self.queue):
             queue_type = type(self.queue)
             current_item = None
@@ -797,6 +892,13 @@ class Writer:
 
     def write(self):
         count = 0
+        if self.target == 'category_template.csv':
+            for template in self.queue:
+                current = self.queue[template]
+                self.writer.writerow(current)
+                CategoryTemplate.category_templates[template] = current
+                self.queue[template] = None
+                count += 1
         if self.target == 'category.csv':
             for category in self.queue:
                 current = self.queue[category]
@@ -862,9 +964,155 @@ class Writer:
                 ProductStock.product_stocks[stock] = current
                 self.queue[stock] = None
                 count += 1
+        if self.target == 'product_image_internal.csv':
+            for index, image in enumerate(self.queue):
+                self.writer.writerow(image)
+                ProductImageInternal.product_images.append(image)
+                self.queue[index] = None
+                count += 1
+        if self.target == 'product_discontinued.csv':
+            for product in self.queue:
+                current = self.queue[product]
+                self.writer.writerow(current)
+                ProductDiscontinued.products_discontinued[product] = current
+                self.queue[product] = None
+                count += 1
+        if self.target == 'product_group.csv':
+            for group in self.queue:
+                current = self.queue[group]
+                self.writer.writerow(current)
+                ProductGroup.product_groups[group] = current
+                self.queue[group] = None
+                count += 1
+        if self.target == 'product_search_attribute_map.csv':
+            for index, attribute in enumerate(self.queue):
+                self.writer.writerow(attribute)
+                ProductSearchAttributeMap.search_attributes.append(attribute)
+                self.queue[index] = None
+                count += 1
+        if self.target == 'product_search_attribute.csv':
+            for attribute in self.queue:
+                current = self.queue[attribute]
+                self.writer.writerow(current)
+                ProductSearchAttribute.search_attributes[attribute] = current
+                self.queue[attribute] = None
         self.file.close()
         self.queue = {}
         Logger.highlight('Saved '+bold(count)+' queue items.')
+
+
+class Processor:
+    products = {}
+    categories = []
+
+    def __init__(self, args):
+        Logger.highlight('Recived arguments: '+str(args))
+        workbook = load_workbook(filename = args.filename, read_only=args.read_only)
+        self.data_product_export = self.process_workbook(workbook['Product Export'])
+        self.data_product_meta = self.process_workbook(workbook['Product Meta Data'])
+        del workbook
+
+    def hydrate(self):
+        missed_ids = [] # products without id
+        for row in self.data_product_export['rows']:
+            if row > 1:
+                current_row = self.data_product_export['rows'][row]
+                product = {}
+                for index, value in enumerate(current_row):
+                    product[self.data_product_export['headers'][index]] = value
+                sku = product['Product SKU']
+                if sku != '':
+                    self.products[str(product['Product SKU'])] = product
+                if sku == '':
+                    missed_ids.append(product['Product ID'])
+                del current_row
+        for product in self.products:
+            current = self.products[product]
+            split = current['Category'].split('>')
+            # if split[0] != 'Uncategorized': category_mappings[product] = { split[0]: split[1] }
+            if split[0] != 'Uncategorized':
+                self.categories.append({ 'level_1': split[0], 'level_2': split[1] })
+            del current
+        del product, split
+        category_count = {}
+        category_index = 0
+        while category_index < len(self.categories):
+            if self.categories[category_index]['level_2'] in category_count:
+                del self.categories[category_index]
+            else:
+                category_count[self.categories[category_index]['level_2']] = 1
+                category_index += 1
+        del category_count, category_index
+        missed_rows = {} # rows without data
+        missed_matches = [] # meta prodocuts not mached to export products
+        for row in self.data_product_meta['rows']:
+            if row > 1:
+                current_row = self.data_product_meta['rows'][row]
+                meta_product = {}
+                for index, value in enumerate(current_row):
+                    meta_product[self.data_product_meta['headers'][index]] = value
+                del index, value
+                sku = meta_product['Product SKU']
+                if sku != '':
+                    try:
+                        current_product = self.products[str(sku)]
+                        self.products[str(sku)].update(meta_product)
+                    except KeyError: missed_matches.append(current_product['Product ID'])
+                    del meta_product
+                if sku == '':
+                    missed_rows[row] = current_row
+                    continue
+        del current_row, current_product, row, sku
+
+    @staticmethod
+    def run():
+        CategoryTemplate().process()
+        Category().process()
+        ProductAbstract().process()
+        ProductConcrete().process()
+        ProductAbstractStore().process()
+        ProductAttributeKey().process()
+        ProductImage().process()
+        ProductImageInternal().process()
+        ProductLabel().process()
+        ProductManagmentAttribute().process()
+        ProductPrice().process()
+        ProductStock().process()
+        ProductDiscontinued().process()
+        ProductGroup().process()
+        ProductSearchAttributeMap().process()
+        ProductSearchAttribute().process()
+        Logger.highlight('Processing complete.')
+        # for product in ProductAbstract.product_abstracts:
+        #     del products[product]
+        # for product in ProductConcrete.product_concretes:
+        #     del products[product]
+        # del product
+        # if products == ProductConcrete.product_concretes_orphaned:
+        #     missed_products = products
+        #     print 'bleh'
+        #     del ProductConcrete.product_concretes_orphaned
+        # del products
+        # print 'missed_products'
+
+    @staticmethod
+    def process_workbook(sheet):
+        row_count = 0
+        cell_count = 0
+        values = {}
+        for row in sheet.rows:
+            cols = []
+            for cell in row:
+                if cell.value is not None: cols.append(cell.value)
+                elif cell.value is None: cols.append('')
+                cell_count += 1
+                del cell
+            row_count += 1
+            values[row_count] = cols
+            del cols, row
+        headers = values[1]
+        del values[1] # removes first row as it contains headers
+        return {'headers': headers, 'rows': values}
 
 
 def upperCase(string):
