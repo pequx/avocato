@@ -2,3 +2,4 @@ tox>=2.7.0
 openpyxl>=2.5.12
 progress>=1.4.0
 fabulous>=0.3.0
+inflection>=0.3.1
