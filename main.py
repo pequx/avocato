@@ -3,9 +3,9 @@
 Module Docstring
 """
 
-__author__ = "Maciej Piernikowski <maciej@piernikowski.net>"
+__author__ = "https://github.com/pequx"
 __version__ = "0.6.0"
-__license__ = "MIT"
+__license__ = "Proprietary"
 
 import re, datetime
 from os import path as os_path
